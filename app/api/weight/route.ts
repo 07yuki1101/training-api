@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     .doc(body.userId)
     .collection("weights")  
     .add({
-        weight: body.weight,
+        bw: body.weight,
         date: body.date,
         createdAt: new Date(),
     });
