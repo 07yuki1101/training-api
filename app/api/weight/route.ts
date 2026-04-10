@@ -1,5 +1,18 @@
 import { NextResponse } from "next/server";
+import admin from "firebase-admin";
 
+
+if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    });
+  }
+  
+  const db = admin.firestore();
 // 共通ヘッダー
 const headers = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +34,16 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     console.log("受け取った:", body);
+
+    await db
+    .collection("users")
+    .doc(body.userId)
+    .collection("weights")  
+    .add({
+        weight: body.weight,
+        date: body.date,
+        createdAt: new Date(),
+    });
 
     return NextResponse.json(
       {
