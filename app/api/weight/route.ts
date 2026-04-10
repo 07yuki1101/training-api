@@ -56,6 +56,14 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const { userId, weight, date } = body;
+
+if (!userId || !weight || !date) {
+  return NextResponse.json(
+    { success: false, message: "missing fields" },
+    { status: 400, headers }
+  );
+}
 
     console.log("受け取った:", body);
 
@@ -93,4 +101,36 @@ export async function OPTIONS() {
     status: 200,
     headers,
   });
+}
+
+// DELETE
+export async function DELETE(req: Request) {
+  try {
+    const body = await req.json();
+    const { userId, id } = body;
+
+    if (!userId || !id) {
+      return NextResponse.json(
+        { success: false, message: "userId and id required" },
+        { status: 400, headers }
+      );
+    }
+    await db
+    .collection("users")
+    .doc(body.userId)
+    .collection("weights")
+    .doc(body.id)
+    .delete();
+  
+    return NextResponse.json(
+      { success: true },
+      { headers }
+    );
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { success: false },
+      { status: 500, headers }
+    );
+  }
 }
