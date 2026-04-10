@@ -21,11 +21,35 @@ const headers = {
 };
 
 // GET
-export async function GET() {
-  return NextResponse.json(
-    { message: "API OK" },
-    { headers }
-  );
+export async function GET(req: Request) {
+    try{
+        const { searchParams } = new URL(req.url);
+        const userId = searchParams.get("userId");
+
+        if (!userId) {
+            return NextResponse.json(
+              { success: false, message: "userId is required" },
+              { status: 400, headers }
+            );
+          }
+        const snapshot = await db
+        .collection("users")
+        .doc(userId)
+        .collection("weights")
+        .get();
+
+        const data = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+        }));
+        return NextResponse.json(data,{headers});
+    } catch (error) {
+        console.error(error);
+        return NextResponse.json(
+            { success:false },
+            { status: 500, headers }
+        );
+    }
 }
 
 // POST
