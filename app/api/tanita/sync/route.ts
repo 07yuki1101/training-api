@@ -71,40 +71,25 @@ export async function GET(req: Request) {
     const to = new Date();
     const from = new Date(to);
     from.setFullYear(from.getFullYear() - 1);
+    // HealthPlanet の from/to は YYYYMMDDHHMMSS（14桁）
     const fmt = (d: Date) =>
-      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}0000`;
+      `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}000000`;
 
-    const qp = `date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
-    const base = "https://www.healthplanet.jp/status/innerscan.json";
+    // HealthPlanet の from/to は YYYYMMDDHHMMSS（14桁、秒まで必要）
+    const apiUrl = `https://www.healthplanet.jp/status/innerscan.json`
+      + `?access_token=${encodeURIComponent(accessToken)}`
+      + `&date=1`
+      + `&from=${fmt(from)}`
+      + `&to=${fmt(to)}`
+      + `&tag=6021,6022`;
 
-    // トークンに含まれる / より後ろの部分だけを使うパターンも試す
-    const tokenAfterSlash = accessToken.includes("/")
-      ? accessToken.split("/").slice(1).join("/")
-      : accessToken;
+    const dataRes = await fetch(apiUrl);
+    const rawText = await dataRes.text().catch(() => "");
 
-    // Authorization ヘッダーなし（HealthPlanet 独自のクエリパラメータ方式）で各トークン形式を試す
-    const attempts = [
-      { label: "QS after-slash",   url: `${base}?access_token=${tokenAfterSlash}&${qp}` },
-      { label: "QS full encoded",  url: `${base}?access_token=${encodeURIComponent(accessToken)}&${qp}` },
-      { label: "QS full raw",      url: `${base}?access_token=${accessToken}&${qp}` },
-    ];
+    console.log("HP status:", dataRes.status, "isJson:", rawText.trimStart().startsWith("{"));
 
-    let rawText = "";
-    let dataRes: Response | null = null;
-
-    for (const attempt of attempts) {
-      const res = await fetch(attempt.url);
-      const text = await res.text().catch(() => "");
-      console.log(`[${attempt.label}] status:${res.status} isJson:${text.trimStart().startsWith("{")} body:${text.slice(0, 100)}`);
-      if (res.ok && !text.trimStart().startsWith("<")) {
-        rawText = text;
-        dataRes = res;
-        break;
-      }
-    }
-
-    if (!dataRes || rawText.trimStart().startsWith("<")) {
-      throw new Error("HealthPlanet API error: 全パターン失敗。Vercelログを確認してください。");
+    if (!dataRes.ok || rawText.trimStart().startsWith("<")) {
+      throw new Error(`HealthPlanet API error (${dataRes.status}): 再連携してください`);
     }
 
     const json = JSON.parse(rawText);
