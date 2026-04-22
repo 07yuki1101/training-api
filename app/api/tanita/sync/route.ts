@@ -74,19 +74,22 @@ export async function GET(req: Request) {
     const fmt = (d: Date) =>
       `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}0000`;
 
-    const params = new URLSearchParams({
-      date: "1",
-      from: fmt(from),
-      to: fmt(to),
-      tag: "6021,6022",
-    });
+    // access_token の / が URLSearchParams や encodeURIComponent で %2F になるのを防ぐため
+    // POST body の生文字列でトークンを送る（Node.js は POST body 文字列を再エンコードしない）
+    const body = `access_token=${accessToken}`
+      + `&date=1`
+      + `&from=${fmt(from)}`
+      + `&to=${fmt(to)}`
+      + `&tag=6021,6022`;
+
+    console.log("token includes slash:", accessToken.includes("/"));
 
     const dataRes = await fetch(
-      `https://www.healthplanet.jp/status/innerscan.json?${params}`,
+      "https://www.healthplanet.jp/status/innerscan.json",
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
       }
     );
 
