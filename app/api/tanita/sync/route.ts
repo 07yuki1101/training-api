@@ -80,10 +80,21 @@ export async function GET(req: Request) {
     apiUrl.searchParams.set("to", fmt(to));
     apiUrl.searchParams.set("tag", "6021");
 
-    console.log("Calling HealthPlanet API:", apiUrl.toString().replace(/access_token=[^&]+/, "access_token=***"));
+    console.log("Calling HealthPlanet API with token length:", accessToken.length);
 
-    const dataRes = await fetch(apiUrl.toString(), {
-      headers: { "Accept": "application/json" },
+    const dataRes = await fetch("https://www.healthplanet.jp/status/innerscan.json", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+      },
+      body: new URLSearchParams({
+        access_token: accessToken,
+        date: "1",
+        from: fmt(from),
+        to: fmt(to),
+        tag: "6021",
+      }),
     });
 
     const rawText = await dataRes.text();
@@ -92,6 +103,7 @@ export async function GET(req: Request) {
 
     const contentType = dataRes.headers.get("content-type") ?? "";
     if (!contentType.includes("json") || rawText.trimStart().startsWith("<")) {
+      console.error("HTML response body:", rawText.slice(0, 500));
       throw new Error(`HealthPlanet API error (${dataRes.status}): HTMLが返されました。再連携してください。`);
     }
 
