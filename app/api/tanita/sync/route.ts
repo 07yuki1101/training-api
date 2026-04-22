@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import admin from "firebase-admin";
 
 export const dynamic = "force-dynamic";
-export const preferredRegion = ["hnd1"]; // Vercel Tokyo — HealthPlanet JP API
+export const preferredRegion = ["hnd1"];
 
 function getDb() {
   if (!admin.apps.length) {
@@ -74,37 +74,33 @@ export async function GET(req: Request) {
     const fmt = (d: Date) =>
       `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}0000`;
 
-    console.log("Token length:", accessToken.length, "prefix:", accessToken.slice(0, 8));
+    // トークンに / が含まれるため encodeURIComponent は使わない
+    // Node.js fetch が / を %2F に自動エンコードしないよう URL オブジェクトを使わず文字列で組む
+    const rawUrl = "https://www.healthplanet.jp/status/innerscan.json"
+      + "?access_token=" + accessToken
+      + "&date=1"
+      + "&from=" + fmt(from)
+      + "&to=" + fmt(to)
+      + "&tag=6021,6022";
 
-    // --- パターン1: Bearer ヘッダー ---
-    const apiUrl1 = `https://www.healthplanet.jp/status/innerscan.json?date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
-    console.log("[Bearer] GET", apiUrl1);
-    const res1 = await fetch(apiUrl1, {
-      headers: { "Authorization": `Bearer ${accessToken}`, "Accept": "application/json" },
-    });
-    const text1 = await res1.text().catch(() => "");
-    console.log("[Bearer] status:", res1.status, "ct:", res1.headers.get("content-type"));
-    console.log("[Bearer] body:", text1.slice(0, 300));
-    const resHeaders1: Record<string, string> = {};
-    res1.headers.forEach((v, k) => { resHeaders1[k] = v; });
-    console.log("[Bearer] headers:", JSON.stringify(resHeaders1));
+    // スラッシュが生き残っているか確認
+    const hasSlash = rawUrl.includes(accessToken.slice(0, 5));
+    console.log("token length:", accessToken.length, "has slash:", accessToken.includes("/"));
+    console.log("url contains raw token:", hasSlash);
+    console.log("url (masked):", rawUrl.replace(accessToken, "***"));
 
-    // --- パターン2: クエリパラメータ（エンコードなし）---
-    const apiUrl2 = `https://www.healthplanet.jp/status/innerscan.json?access_token=${accessToken}&date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
-    console.log("[QS-raw] GET", apiUrl2.replace(accessToken, "***"));
-    const res2 = await fetch(apiUrl2);
-    const text2 = await res2.text().catch(() => "");
-    console.log("[QS-raw] status:", res2.status, "ct:", res2.headers.get("content-type"));
-    console.log("[QS-raw] body:", text2.slice(0, 300));
+    const dataRes = await fetch(rawUrl);
+    const rawText = await dataRes.text().catch(() => "");
 
-    // 最初に JSON が取れた方を使う
-    const rawText = text1.trimStart().startsWith("{") ? text1
-                  : text2.trimStart().startsWith("{") ? text2
-                  : text1; // どちらもだめなら text1 でエラーにする
-    const dataRes = text1.trimStart().startsWith("{") ? res1 : res2;
+    console.log("HP status:", dataRes.status);
+    console.log("HP content-type:", dataRes.headers.get("content-type"));
+    console.log("HP body (first 500):", rawText.slice(0, 500));
 
     if (rawText.trimStart().startsWith("<")) {
-      throw new Error(`HealthPlanet API error (${dataRes.status}): HTMLが返されました。再連携してください。`);
+      return NextResponse.json({
+        error: `HealthPlanet HTML response (${dataRes.status}) — 再連携してください`,
+        preview: rawText.slice(0, 200),
+      }, { status: 500, headers });
     }
 
     const json = JSON.parse(rawText);
