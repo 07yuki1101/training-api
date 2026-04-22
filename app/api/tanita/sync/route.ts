@@ -74,31 +74,38 @@ export async function GET(req: Request) {
     const fmt = (d: Date) =>
       `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}0000`;
 
-    // access_token の / が URLSearchParams や encodeURIComponent で %2F になるのを防ぐため
-    // POST body の生文字列でトークンを送る（Node.js は POST body 文字列を再エンコードしない）
-    const body = `access_token=${accessToken}`
-      + `&date=1`
-      + `&from=${fmt(from)}`
-      + `&to=${fmt(to)}`
-      + `&tag=6021,6022`;
+    const qp = `date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
+    const endpoint = `https://www.healthplanet.jp/status/innerscan.json?${qp}`;
 
-    console.log("token includes slash:", accessToken.includes("/"));
+    // HealthPlanet は Authorization ヘッダーがある場合のみ API として処理する
+    // Bearer / OAuth それぞれ試して 200 JSON を返した方を使う
+    const tokenAfterSlash = accessToken.includes("/")
+      ? accessToken.split("/").slice(1).join("/")
+      : accessToken;
 
-    const dataRes = await fetch(
-      "https://www.healthplanet.jp/status/innerscan.json",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
+    const attempts = [
+      { label: "Bearer full",       headers: { Authorization: `Bearer ${accessToken}` } },
+      { label: "Bearer after-slash", headers: { Authorization: `Bearer ${tokenAfterSlash}` } },
+      { label: "OAuth full",        headers: { Authorization: `OAuth ${accessToken}` } },
+    ];
+
+    let rawText = "";
+    let dataRes: Response | null = null;
+
+    for (const attempt of attempts) {
+      const res = await fetch(endpoint, { headers: attempt.headers });
+      const text = await res.text().catch(() => "");
+      const wwwAuth = res.headers.get("www-authenticate");
+      console.log(`[${attempt.label}] status:${res.status} www-auth:${wwwAuth} body:${text.slice(0, 120)}`);
+      if (res.ok && !text.trimStart().startsWith("<")) {
+        rawText = text;
+        dataRes = res;
+        break;
       }
-    );
+    }
 
-    const rawText = await dataRes.text().catch(() => "");
-    console.log("HP status:", dataRes.status, "ct:", dataRes.headers.get("content-type"));
-    console.log("HP body:", rawText.slice(0, 300));
-
-    if (!dataRes.ok || rawText.trimStart().startsWith("<")) {
-      throw new Error(`HealthPlanet API error (${dataRes.status}): 再連携してください`);
+    if (!dataRes || rawText.trimStart().startsWith("<")) {
+      throw new Error("HealthPlanet API error: 全パターン失敗。Vercelログを確認してください。");
     }
 
     const json = JSON.parse(rawText);
