@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import admin from "firebase-admin";
 
 if (!admin.apps.length) {
@@ -13,13 +13,14 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
-  const uid = searchParams.get("state");
+  const uid = req.cookies.get("tanita_uid")?.value;
   const appUrl = process.env.TANITA_APP_URL!;
 
   if (!code || !uid) {
+    console.error("missing_params: code=", code, "uid=", uid);
     return NextResponse.redirect(`${appUrl}?tanita=error&reason=missing_params`);
   }
 
@@ -50,7 +51,9 @@ export async function GET(req: Request) {
       connectedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    return NextResponse.redirect(`${appUrl}?tanita=connected`);
+    const response = NextResponse.redirect(`${appUrl}?tanita=connected`);
+    response.cookies.delete("tanita_uid");
+    return response;
   } catch (err) {
     console.error("tanita callback error:", err);
     const reason = encodeURIComponent((err as Error).message ?? "unknown");

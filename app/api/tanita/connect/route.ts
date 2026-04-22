@@ -13,7 +13,15 @@ export async function GET(req: Request) {
   authUrl.searchParams.set("redirect_uri", process.env.TANITA_REDIRECT_URI!);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", "innerscan");
-  authUrl.searchParams.set("state", uid);
 
-  return NextResponse.redirect(authUrl.toString());
+  // UIDをcookieに保存（HealthPlanetはstateパラメータを返さないため）
+  const response = NextResponse.redirect(authUrl.toString());
+  response.cookies.set("tanita_uid", uid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
+  });
+  return response;
 }
