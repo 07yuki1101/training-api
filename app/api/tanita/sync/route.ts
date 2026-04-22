@@ -73,41 +73,24 @@ export async function GET(req: Request) {
     const fmt = (d: Date) =>
       `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}0000`;
 
-    const apiUrl = new URL("https://www.healthplanet.jp/status/innerscan.json");
-    apiUrl.searchParams.set("access_token", accessToken);
-    apiUrl.searchParams.set("date", "1");
-    apiUrl.searchParams.set("from", fmt(from));
-    apiUrl.searchParams.set("to", fmt(to));
-    apiUrl.searchParams.set("tag", "6021");
-
     console.log("Token length:", accessToken.length, "prefix:", accessToken.slice(0, 8));
 
-    // GETリクエスト、リダイレクト追従を無効化（302→HTMLになるのを防ぐ）
-    const dataUrl = new URL("https://www.healthplanet.jp/status/innerscan.json");
-    dataUrl.searchParams.set("access_token", accessToken);
-    dataUrl.searchParams.set("date", "1");
-    dataUrl.searchParams.set("from", fmt(from));
-    dataUrl.searchParams.set("to", fmt(to));
-    dataUrl.searchParams.set("tag", "6021");
+    // HealthPlanet API は POST + form body が必要。tag のカンマは URLSearchParams でエンコードされるため手動で構築
+    const body = `access_token=${encodeURIComponent(accessToken)}&date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
+    console.log("Request body (token masked):", body.replace(encodeURIComponent(accessToken), "***"));
 
-    const dataRes = await fetch(dataUrl.toString(), {
-      redirect: "manual",
-      headers: { "Accept": "application/json" },
+    const dataRes = await fetch("https://www.healthplanet.jp/status/innerscan.json", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
     });
 
-    const rawText = dataRes.status === 0 ? "" : await dataRes.text().catch(() => "");
-    console.log("HealthPlanet status:", dataRes.status, "redirect:", dataRes.redirected);
+    const rawText = await dataRes.text().catch(() => "");
+    console.log("HealthPlanet status:", dataRes.status, "redirected:", dataRes.redirected);
+    console.log("HealthPlanet content-type:", dataRes.headers.get("content-type"));
     console.log("HealthPlanet body (first 300):", rawText.slice(0, 300));
 
-    // リダイレクト or HTML が返ってきた場合はトークン無効
-    if (dataRes.status === 301 || dataRes.status === 302 || dataRes.status === 0) {
-      const location = dataRes.headers.get("location") ?? "";
-      console.error("HealthPlanet redirect to:", location);
-      throw new Error(`トークンが無効です。再連携してください。(redirect: ${location})`);
-    }
-
-    const contentType = dataRes.headers.get("content-type") ?? "";
-    if (!contentType.includes("json") || rawText.trimStart().startsWith("<")) {
+    if (rawText.trimStart().startsWith("<")) {
       throw new Error(`HealthPlanet API error (${dataRes.status}): HTMLが返されました。再連携してください。`);
     }
 
