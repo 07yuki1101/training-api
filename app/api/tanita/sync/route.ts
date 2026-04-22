@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
 import admin from "firebase-admin";
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    }),
-  });
-}
+export const dynamic = "force-dynamic";
 
-const db = admin.firestore();
+function getDb() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    });
+  }
+  return admin.firestore();
+}
 
 const headers = {
   "Access-Control-Allow-Origin": "*",
@@ -20,18 +23,17 @@ const headers = {
 };
 
 async function getValidAccessToken(uid: string): Promise<string> {
+  const db = getDb();
   const tokenRef = db.doc(`users/${uid}/tokens/tanita`);
   const snap = await tokenRef.get();
   if (!snap.exists) throw new Error("未連携");
 
   const { accessToken, refreshToken, expiresAt } = snap.data()!;
 
-  // 期限まで5分以上あればそのまま使う
   if (expiresAt && Date.now() < expiresAt - 5 * 60 * 1000) {
     return accessToken;
   }
 
-  // トークンリフレッシュ
   const res = await fetch("https://www.healthplanet.jp/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -63,8 +65,8 @@ export async function GET(req: Request) {
 
   try {
     const accessToken = await getValidAccessToken(uid);
+    const db = getDb();
 
-    // 過去1年分を取得
     const to = new Date();
     const from = new Date(to);
     from.setFullYear(from.getFullYear() - 1);
@@ -73,19 +75,19 @@ export async function GET(req: Request) {
 
     const apiUrl = new URL("https://www.healthplanet.jp/status/innerscan.json");
     apiUrl.searchParams.set("access_token", accessToken);
-    apiUrl.searchParams.set("date", "1"); // 測定日基準
+    apiUrl.searchParams.set("date", "1");
     apiUrl.searchParams.set("from", fmt(from));
     apiUrl.searchParams.set("to", fmt(to));
-    apiUrl.searchParams.set("tag", "6021"); // 体重
+    apiUrl.searchParams.set("tag", "6021");
 
     const dataRes = await fetch(apiUrl.toString());
-    const { data } = await dataRes.json();
+    const json = await dataRes.json();
+    const data = json.data;
 
     if (!data?.length) {
       return NextResponse.json({ synced: 0 }, { headers });
     }
 
-    // 既存日付を取得して重複スキップ
     const weightsRef = db.collection(`users/${uid}/weights`);
     const existingSnap = await weightsRef.get();
     const existingDates = new Set(existingSnap.docs.map((d) => d.data().date));
@@ -94,8 +96,7 @@ export async function GET(req: Request) {
     let count = 0;
 
     for (const item of data) {
-      // "20240101120000" → "2024-01-01"
-      const raw = item.date as string;
+      const raw: string = item.date;
       const date = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
       const bw = parseFloat(item.keydata);
 

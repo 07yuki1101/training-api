@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin from "firebase-admin";
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    }),
-  });
-}
+export const dynamic = "force-dynamic";
 
-const db = admin.firestore();
+function getDb() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+    });
+  }
+  return admin.firestore();
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -44,6 +47,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${appUrl}?tanita=error&reason=${reason}`);
     }
 
+    const db = getDb();
     await db.doc(`users/${uid}/tokens/tanita`).set({
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
