@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const appUrl = process.env.TANITA_APP_URL!;
 
   if (!code || !uid) {
-    return NextResponse.redirect(`${appUrl}?tanita=error`);
+    return NextResponse.redirect(`${appUrl}?tanita=error&reason=missing_params`);
   }
 
   try {
@@ -38,19 +38,22 @@ export async function GET(req: Request) {
     const tokenData = await tokenRes.json();
 
     if (!tokenData.access_token) {
-      return NextResponse.redirect(`${appUrl}?tanita=error`);
+      console.error("token exchange failed:", JSON.stringify(tokenData));
+      const reason = encodeURIComponent(tokenData.error_description ?? tokenData.error ?? "token_failed");
+      return NextResponse.redirect(`${appUrl}?tanita=error&reason=${reason}`);
     }
 
     await db.doc(`users/${uid}/tokens/tanita`).set({
       accessToken: tokenData.access_token,
       refreshToken: tokenData.refresh_token,
-      expiresAt: Date.now() + tokenData.expires_in * 1000,
+      expiresAt: Date.now() + (tokenData.expires_in ?? 3600) * 1000,
       connectedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     return NextResponse.redirect(`${appUrl}?tanita=connected`);
   } catch (err) {
     console.error("tanita callback error:", err);
-    return NextResponse.redirect(`${appUrl}?tanita=error`);
+    const reason = encodeURIComponent((err as Error).message ?? "unknown");
+    return NextResponse.redirect(`${appUrl}?tanita=error&reason=${reason}`);
   }
 }
