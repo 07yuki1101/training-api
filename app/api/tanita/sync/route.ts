@@ -80,16 +80,22 @@ export async function GET(req: Request) {
     apiUrl.searchParams.set("to", fmt(to));
     apiUrl.searchParams.set("tag", "6021");
 
-    const dataRes = await fetch(apiUrl.toString());
-    const rawText = await dataRes.text();
+    console.log("Calling HealthPlanet API:", apiUrl.toString().replace(/access_token=[^&]+/, "access_token=***"));
 
-    if (!dataRes.ok || rawText.trim().startsWith("<")) {
-      console.error("HealthPlanet API unexpected response:", dataRes.status, rawText.slice(0, 300));
-      throw new Error(`HealthPlanet API error (${dataRes.status}): HTMLが返されました。トークンを再連携してください。`);
+    const dataRes = await fetch(apiUrl.toString(), {
+      headers: { "Accept": "application/json" },
+    });
+
+    const rawText = await dataRes.text();
+    console.log("HealthPlanet status:", dataRes.status, "content-type:", dataRes.headers.get("content-type"));
+    console.log("HealthPlanet body (first 200):", rawText.slice(0, 200));
+
+    const contentType = dataRes.headers.get("content-type") ?? "";
+    if (!contentType.includes("json") || rawText.trimStart().startsWith("<")) {
+      throw new Error(`HealthPlanet API error (${dataRes.status}): HTMLが返されました。再連携してください。`);
     }
 
     const json = JSON.parse(rawText);
-    console.log("HealthPlanet response:", JSON.stringify(json).slice(0, 200));
     const data = json.data;
 
     if (!data?.length) {
