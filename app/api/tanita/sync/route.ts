@@ -106,15 +106,24 @@ export async function GET(req: Request) {
     const batch = db.batch();
     let count = 0;
 
+    const byDate = new Map<string, { bw?: number; bf?: number }>();
     for (const item of data) {
       const raw: string = item.date;
       const date = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
-      const bw = parseFloat(item.keydata);
+      const value = parseFloat(item.keydata);
+      if (isNaN(value)) continue;
+      if (!byDate.has(date)) byDate.set(date, {});
+      const entry = byDate.get(date)!;
+      if (item.tag === "6021") entry.bw = value;
+      else if (item.tag === "6022") entry.bf = value;
+    }
 
-      if (!existingDates.has(date) && !isNaN(bw)) {
+    for (const [date, entry] of byDate) {
+      if (!existingDates.has(date) && entry.bw !== undefined) {
         batch.set(weightsRef.doc(), {
           date,
-          bw,
+          bw: entry.bw,
+          ...(entry.bf !== undefined ? { bf: entry.bf } : {}),
           source: "tanita",
           syncedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
