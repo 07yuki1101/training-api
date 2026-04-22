@@ -81,7 +81,15 @@ export async function GET(req: Request) {
     apiUrl.searchParams.set("tag", "6021");
 
     const dataRes = await fetch(apiUrl.toString());
-    const json = await dataRes.json();
+    const rawText = await dataRes.text();
+
+    if (!dataRes.ok || rawText.trim().startsWith("<")) {
+      console.error("HealthPlanet API unexpected response:", dataRes.status, rawText.slice(0, 300));
+      throw new Error(`HealthPlanet API error (${dataRes.status}): HTMLが返されました。トークンを再連携してください。`);
+    }
+
+    const json = JSON.parse(rawText);
+    console.log("HealthPlanet response:", JSON.stringify(json).slice(0, 200));
     const data = json.data;
 
     if (!data?.length) {
