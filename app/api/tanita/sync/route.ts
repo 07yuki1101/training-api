@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import admin from "firebase-admin";
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = ["hnd1"]; // Vercel Tokyo — HealthPlanet JP API
 
 function getDb() {
   if (!admin.apps.length) {
@@ -75,14 +76,12 @@ export async function GET(req: Request) {
 
     console.log("Token length:", accessToken.length, "prefix:", accessToken.slice(0, 8));
 
-    // HealthPlanet API は POST + form body が必要。tag のカンマは URLSearchParams でエンコードされるため手動で構築
-    const body = `access_token=${encodeURIComponent(accessToken)}&date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
-    console.log("Request body (token masked):", body.replace(encodeURIComponent(accessToken), "***"));
+    // tag のカンマが URLSearchParams で %2C にエンコードされるため URL を手動構築
+    const apiUrl = `https://www.healthplanet.jp/status/innerscan.json?access_token=${encodeURIComponent(accessToken)}&date=1&from=${fmt(from)}&to=${fmt(to)}&tag=6021,6022`;
+    console.log("Request URL (token masked):", apiUrl.replace(encodeURIComponent(accessToken), "***"));
 
-    const dataRes = await fetch("https://www.healthplanet.jp/status/innerscan.json", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
+    const dataRes = await fetch(apiUrl, {
+      headers: { "Accept": "application/json" },
     });
 
     const rawText = await dataRes.text().catch(() => "");
